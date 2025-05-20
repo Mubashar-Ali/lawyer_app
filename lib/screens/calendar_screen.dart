@@ -1,388 +1,223 @@
 import 'package:flutter/material.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../models/appointment.dart';
-import '../theme/app_theme.dart';
-import '../widgets/appointment_card.dart';
+import '../widgets/event_item.dart';
+import '../models/case_model.dart';
+import '../models/event_model.dart';
+import '../providers/event_provider.dart';
+import 'add_event_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+  final CaseModel? caseData;
+
+  const CalendarScreen({super.key, this.caseData});
 
   @override
-  State<CalendarScreen> createState() => _CalendarScreenState();
+  _CalendarScreenState createState() => _CalendarScreenState();
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  late DateTime _selectedDate;
-  late List<DateTime> _weekDates;
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  DateTime _focusedDay = DateTime.now();
+  DateTime _selectedDay = DateTime.now();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now();
-    _generateWeekDates();
+    _loadEvents();
   }
 
-  void _generateWeekDates() {
-    final now = DateTime.now();
-    final firstDayOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    _weekDates = List.generate(
-      7,
-      (index) => firstDayOfWeek.add(Duration(days: index)),
-    );
+  Future<void> _loadEvents() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final eventProvider = Provider.of<EventProvider>(context, listen: false);
+      await eventProvider.fetchEvents();
+    } catch (e) {
+      print('Error loading events: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  List<Appointment> _getAppointmentsForSelectedDate() {
-    return dummyAppointments.where((appointment) {
-      return appointment.startTime.year == _selectedDate.year &&
-          appointment.startTime.month == _selectedDate.month &&
-          appointment.startTime.day == _selectedDate.day;
-    }).toList();
+  List<EventModel> _getEventsForDay(DateTime day) {
+    final eventProvider = Provider.of<EventProvider>(context, listen: false);
+    List<EventModel> events = eventProvider.getEventsForDay(day);
+    
+    // Filter by case if provided
+    if (widget.caseData != null) {
+      events = events.where((event) => event.caseId == widget.caseData!.id).toList();
+    }
+    
+    return events;
+  }
+
+  Future<void> _showAddEventDialog() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddEventScreen(
+          caseId: widget.caseData?.id,
+        ),
+      ),
+    ).then((_) {
+      _loadEvents();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final appointmentsForDay = _getAppointmentsForSelectedDate();
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calendar'),
+        title: Text(widget.caseData != null ? 'Case Calendar' : 'Calendar'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.today),
+            icon: Icon(Icons.today),
             onPressed: () {
               setState(() {
-                _selectedDate = DateTime.now();
-                _generateWeekDates();
+                _focusedDay = DateTime.now();
+                _selectedDay = DateTime.now();
               });
             },
           ),
           IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildMonthHeader(),
-          _buildWeekDaySelector(),
-          const SizedBox(height: 16),
-          Expanded(
-            child: appointmentsForDay.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: appointmentsForDay.length,
-                    itemBuilder: (context, index) {
-                      return AppointmentCard(
-                        appointment: appointmentsForDay[index],
-                        onTap: () => _showAppointmentDetails(appointmentsForDay[index]),
-                      );
-                    },
-                  ),
+            icon: Icon(Icons.refresh),
+            onPressed: _loadEvents,
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: AppTheme.primaryColor,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+      body: Consumer<EventProvider>(
+        builder: (context, eventProvider, child) {
+          if (_isLoading) {
+            return Center(child: CircularProgressIndicator());
+          }
 
-  Widget _buildMonthHeader() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            DateFormat('MMMM yyyy').format(_selectedDate),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Row(
+          return Column(
             children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () {
+              TableCalendar(
+                firstDay: DateTime.utc(2020, 1, 1),
+                lastDay: DateTime.utc(2030, 12, 31),
+                focusedDay: _focusedDay,
+                calendarFormat: _calendarFormat,
+                eventLoader: (day) {
+                  return _getEventsForDay(day);
+                },
+                selectedDayPredicate: (day) {
+                  return isSameDay(_selectedDay, day);
+                },
+                onDaySelected: (selectedDay, focusedDay) {
                   setState(() {
-                    final firstDayOfPrevWeek = _weekDates.first.subtract(const Duration(days: 7));
-                    _weekDates = List.generate(
-                      7,
-                      (index) => firstDayOfPrevWeek.add(Duration(days: index)),
-                    );
-                    _selectedDate = _weekDates.first;
+                    _selectedDay = selectedDay;
+                    _focusedDay = focusedDay;
                   });
                 },
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: () {
+                onFormatChanged: (format) {
                   setState(() {
-                    final firstDayOfNextWeek = _weekDates.last.add(const Duration(days: 1));
-                    _weekDates = List.generate(
-                      7,
-                      (index) => firstDayOfNextWeek.add(Duration(days: index)),
-                    );
-                    _selectedDate = _weekDates.first;
+                    _calendarFormat = format;
                   });
                 },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeekDaySelector() {
-    return Container(
-      height: 90,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _weekDates.length,
-        itemBuilder: (context, index) {
-          final date = _weekDates[index];
-          final isSelected = date.year == _selectedDate.year &&
-              date.month == _selectedDate.month &&
-              date.day == _selectedDate.day;
-          final isToday = date.year == DateTime.now().year &&
-              date.month == DateTime.now().month &&
-              date.day == DateTime.now().day;
-
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedDate = date;
-              });
-            },
-            child: Container(
-              width: 60,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isToday && !isSelected ? AppTheme.primaryColor : Colors.transparent,
-                  width: 1,
+                onPageChanged: (focusedDay) {
+                  _focusedDay = focusedDay;
+                },
+                calendarStyle: CalendarStyle(
+                  markersMaxCount: 3,
+                  markerDecoration: BoxDecoration(
+                    color: Color(0xFF1A237E),
+                    shape: BoxShape.circle,
+                  ),
+                  selectedDecoration: BoxDecoration(
+                    color: Color(0xFF1A237E),
+                    shape: BoxShape.circle,
+                  ),
+                  todayDecoration: BoxDecoration(
+                    color: Color(0xFF1A237E).withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                headerStyle: HeaderStyle(
+                  formatButtonVisible: true,
+                  titleCentered: true,
+                  formatButtonShowsNext: false,
+                  formatButtonDecoration: BoxDecoration(
+                    color: Color(0xFF1A237E).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  formatButtonTextStyle: TextStyle(color: Color(0xFF1A237E)),
                 ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    DateFormat('E').format(date),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? Colors.white : AppTheme.secondaryTextColor,
+              Divider(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      'Events for ${DateFormat('MMM d, yyyy').format(_selectedDay)}',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+                    Spacer(),
+                    Text(
+                      '${_getEventsForDay(_selectedDay).length} events',
+                      style: TextStyle(color: Colors.grey),
                     ),
-                    child: Center(
-                      child: Text(
-                        date.day.toString(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? Colors.white
-                              : isToday
-                                  ? AppTheme.primaryColor
-                                  : AppTheme.textColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              Expanded(
+                child: _getEventsForDay(_selectedDay).isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              'No events for this day',
+                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: EdgeInsets.all(16),
+                        itemCount: _getEventsForDay(_selectedDay).length,
+                        itemBuilder: (context, index) {
+                          final event = _getEventsForDay(_selectedDay)[index];
+                          return EventItem(
+                            title: event.title,
+                            time: DateFormat('h:mm a').format(event.dateTime),
+                            client: event.clientName ?? 'No client',
+                            caseTitle: event.caseTitle,
+                            icon: event.getEventIcon(),
+                            color: event.getEventColor(),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AddEventScreen(
+                                    event: event,
+                                  ),
+                                ),
+                              ).then((_) => _loadEvents());
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.event_available,
-            size: 80,
-            color: Colors.grey[300],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No appointments for ${DateFormat('MMMM d, yyyy').format(_selectedDate)}',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.add),
-            label: const Text('Add Appointment'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Color(0xFF1A237E),
+        onPressed: _showAddEventDialog,
+        child: Icon(Icons.add),
       ),
-    );
-  }
-
-  void _showAppointmentDetails(Appointment appointment) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      appointment.title,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildDetailRow(
-                Icons.access_time,
-                'Time',
-                '${DateFormat('h:mm a').format(appointment.startTime)} - ${DateFormat('h:mm a').format(appointment.endTime)}',
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                Icons.calendar_today,
-                'Date',
-                DateFormat('MMMM d, yyyy').format(appointment.startTime),
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                Icons.person_outline,
-                'Client',
-                appointment.clientName,
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                Icons.location_on_outlined,
-                'Location',
-                appointment.location,
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                Icons.category_outlined,
-                'Type',
-                appointment.type,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Description',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                appointment.description,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.secondaryTextColor,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Cancel'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 20,
-          color: AppTheme.primaryColor,
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.secondaryTextColor,
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

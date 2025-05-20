@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "412678277917",
+    "project_id": "food-delivery-mega",
+    "storage_bucket": "food-delivery-mega.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:412678277917:android:cd6c8e1d601f00e1b2aff4",
+        "android_client_info": {
+          "package_name": "com.example.food_delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVQu9OeN4lQEeUOKP-PD6YEJW6_cJU31I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:412678277917:android:817a6e583ac01208b2aff4",
+        "android_client_info": {
+          "package_name": "com.example.lawyer_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVQu9OeN4lQEeUOKP-PD6YEJW6_cJU31I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

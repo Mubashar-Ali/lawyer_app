@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:lawyer_app/widgets/case_list_item.dart';
+import 'package:lawyer_app/widgets/client_list_item.dart';
 import 'package:provider/provider.dart';
-import '../providers/case_provider.dart';
-import '../models/case_model.dart';
+import '../providers/client_provider.dart';
+import '../models/client_model.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/error_view.dart';
-import 'add_case_screen.dart';
+import 'add_client_screen.dart';
 
-class CasesScreen extends StatefulWidget {
-  const CasesScreen({super.key});
+class ClientsScreen extends StatefulWidget {
+  const ClientsScreen({super.key});
 
   @override
-  _CasesScreenState createState() => _CasesScreenState();
+  _ClientsScreenState createState() => _ClientsScreenState();
 }
 
-class _CasesScreenState extends State<CasesScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ClientsScreenState extends State<ClientsScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   String _searchQuery = '';
@@ -26,63 +24,40 @@ class _CasesScreenState extends State<CasesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
 
-    // Fetch cases when screen loads
+    // Fetch clients when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<CaseProvider>(context, listen: false).fetchCases();
+      Provider.of<ClientProvider>(context, listen: false).fetchClients();
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  List<CaseModel> _filterCases(List<CaseModel> cases, String status) {
-    List<CaseModel> filteredCases = cases;
-
-    // Filter by status if not "All"
-    if (status != 'All') {
-      filteredCases =
-          cases.where((caseItem) => caseItem.status == status).toList();
-    }
-
+  List<ClientModel> _filterClients(List<ClientModel> clients) {
     // Filter by search query if present
     if (_searchQuery.isNotEmpty) {
-      filteredCases =
-          filteredCases.where((caseItem) {
-            return caseItem.title.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                caseItem.caseNumber.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                caseItem.clientName.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                caseItem.court.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                caseItem.description.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                );
-          }).toList();
+      return clients.where((client) {
+        return client.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            client.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            client.phone.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
     }
 
-    return filteredCases;
+    return clients;
   }
 
-  void _confirmDelete(BuildContext context, CaseModel caseItem) {
+  void _confirmDelete(BuildContext context, ClientModel client) {
     showDialog(
       context: context,
       builder:
           (ctx) => AlertDialog(
             title: Text('Confirm Delete'),
             content: Text(
-              'Are you sure you want to delete this case? This action cannot be undone.',
+              'Are you sure you want to delete this client? This action cannot be undone.',
             ),
             actions: [
               TextButton(
@@ -95,13 +70,13 @@ class _CasesScreenState extends State<CasesScreen>
                 onPressed: () async {
                   Navigator.of(ctx).pop();
                   try {
-                    await Provider.of<CaseProvider>(
+                    await Provider.of<ClientProvider>(
                       context,
                       listen: false,
-                    ).deleteCase(caseItem.id);
+                    ).deleteClient(client.id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Case deleted successfully'),
+                        content: Text('Client deleted successfully'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -109,7 +84,7 @@ class _CasesScreenState extends State<CasesScreen>
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Error deleting case: ${error.toString()}',
+                          'Error deleting client: ${error.toString()}',
                         ),
                         backgroundColor: Colors.red,
                       ),
@@ -130,8 +105,8 @@ class _CasesScreenState extends State<CasesScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
-        return Consumer<CaseProvider>(
-          builder: (context, caseProvider, child) {
+        return Consumer<ClientProvider>(
+          builder: (context, clientProvider, child) {
             return Container(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Column(
@@ -140,7 +115,7 @@ class _CasesScreenState extends State<CasesScreen>
                   Padding(
                     padding: EdgeInsets.only(bottom: 16, left: 24, right: 24),
                     child: Text(
-                      'Sort Cases',
+                      'Sort Clients',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -149,68 +124,57 @@ class _CasesScreenState extends State<CasesScreen>
                     ),
                   ),
                   _buildSortOption(
-                    title: 'Date (Newest first)',
+                    title: 'Name (A-Z)',
+                    icon: Icons.sort_by_alpha,
+                    isSelected:
+                        clientProvider.currentSortOption ==
+                        ClientSortOption.nameAZ,
+                    onTap: () {
+                      clientProvider.setSortOption(ClientSortOption.nameAZ);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _buildSortOption(
+                    title: 'Name (Z-A)',
+                    icon: Icons.sort_by_alpha,
+                    isSelected:
+                        clientProvider.currentSortOption ==
+                        ClientSortOption.nameZA,
+                    onTap: () {
+                      clientProvider.setSortOption(ClientSortOption.nameZA);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _buildSortOption(
+                    title: 'Date Added (Newest first)',
                     icon: Icons.arrow_downward,
                     isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.dateNewest,
+                        clientProvider.currentSortOption ==
+                        ClientSortOption.dateNewest,
                     onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.dateNewest);
+                      clientProvider.setSortOption(ClientSortOption.dateNewest);
                       Navigator.pop(context);
                     },
                   ),
                   _buildSortOption(
-                    title: 'Date (Oldest first)',
+                    title: 'Date Added (Oldest first)',
                     icon: Icons.arrow_upward,
                     isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.dateOldest,
+                        clientProvider.currentSortOption ==
+                        ClientSortOption.dateOldest,
                     onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.dateOldest);
+                      clientProvider.setSortOption(ClientSortOption.dateOldest);
                       Navigator.pop(context);
                     },
                   ),
                   _buildSortOption(
-                    title: 'Title (A-Z)',
-                    icon: Icons.sort_by_alpha,
+                    title: 'Most Cases',
+                    icon: Icons.folder,
                     isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.titleAZ,
+                        clientProvider.currentSortOption ==
+                        ClientSortOption.mostCases,
                     onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.titleAZ);
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _buildSortOption(
-                    title: 'Title (Z-A)',
-                    icon: Icons.sort_by_alpha,
-                    isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.titleZA,
-                    onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.titleZA);
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _buildSortOption(
-                    title: 'Status (Active first)',
-                    icon: Icons.check_circle_outline,
-                    isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.statusActive,
-                    onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.statusActive);
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _buildSortOption(
-                    title: 'Status (Closed first)',
-                    icon: Icons.cancel_outlined,
-                    isSelected:
-                        caseProvider.currentSortOption ==
-                        CaseSortOption.statusClosed,
-                    onTap: () {
-                      caseProvider.setSortOption(CaseSortOption.statusClosed);
+                      clientProvider.setSortOption(ClientSortOption.mostCases);
                       Navigator.pop(context);
                     },
                   ),
@@ -266,29 +230,10 @@ class _CasesScreenState extends State<CasesScreen>
                 ? TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Search cases...',
+                    hintText: 'Search clients...',
                     hintStyle: TextStyle(color: Colors.white70),
-                    // border: InputBorder.none,
-                    // border: OutlineInputBorder(
-                    //   borderRadius: BorderRadius.circular(8),
-                    //   borderSide: BorderSide(color: Colors.white70),
-                    // ),
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white70),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white70),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.red),
-                    ),
+                    border: InputBorder.none,
                   ),
-                  cursorColor: Colors.white,
                   style: TextStyle(color: Colors.white),
                   autofocus: true,
                   onChanged: (value) {
@@ -297,7 +242,7 @@ class _CasesScreenState extends State<CasesScreen>
                     });
                   },
                 )
-                : Text('Cases'),
+                : Text('Clients'),
         actions: [
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
@@ -314,61 +259,33 @@ class _CasesScreenState extends State<CasesScreen>
           IconButton(
             icon: Icon(Icons.sort),
             onPressed: _showSortOptions,
-            tooltip: 'Sort cases',
+            tooltip: 'Sort clients',
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: [
-            Tab(text: 'All'),
-            Tab(text: 'Active'),
-            Tab(text: 'Pending'),
-            Tab(text: 'Closed'),
-          ],
-        ),
       ),
-      body: Consumer<CaseProvider>(
-        builder: (context, caseProvider, child) {
-          if (caseProvider.isOffline) {
+      body: Consumer<ClientProvider>(
+        builder: (context, clientProvider, child) {
+          if (clientProvider.isOffline) {
             return Column(
               children: [
                 OfflineBanner(),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildCaseList(caseProvider.cases, 'All'),
-                      _buildCaseList(caseProvider.cases, 'Active'),
-                      _buildCaseList(caseProvider.cases, 'Pending'),
-                      _buildCaseList(caseProvider.cases, 'Closed'),
-                    ],
-                  ),
-                ),
+                Expanded(child: _buildClientList(clientProvider)),
               ],
             );
           }
 
-          if (caseProvider.isLoading) {
+          if (clientProvider.isLoading) {
             return Center(child: LoadingIndicator());
           }
 
-          if (caseProvider.error != null) {
+          if (clientProvider.error != null) {
             return ErrorView(
-              error: caseProvider.error!,
-              onRetry: () => caseProvider.fetchCases(),
+              error: clientProvider.error!,
+              onRetry: () => clientProvider.fetchClients(),
             );
           }
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildCaseList(caseProvider.cases, 'All'),
-              _buildCaseList(caseProvider.cases, 'Active'),
-              _buildCaseList(caseProvider.cases, 'Pending'),
-              _buildCaseList(caseProvider.cases, 'Closed'),
-            ],
-          );
+          return _buildClientList(clientProvider);
         },
       ),
       floatingActionButton: FloatingActionButton(
@@ -377,29 +294,27 @@ class _CasesScreenState extends State<CasesScreen>
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => AddCaseScreen()),
+            MaterialPageRoute(builder: (context) => AddClientScreen()),
           );
         },
       ),
     );
   }
 
-  Widget _buildCaseList(List<CaseModel> cases, String status) {
-    final filteredCases = _filterCases(cases, status);
+  Widget _buildClientList(ClientProvider clientProvider) {
+    final filteredClients = _filterClients(clientProvider.clients);
 
-    if (filteredCases.isEmpty) {
+    if (filteredClients.isEmpty) {
       return EmptyState(
-        icon: Icons.gavel,
+        icon: Icons.people,
         title:
             _searchQuery.isNotEmpty
-                ? 'No cases match your search'
-                : 'No $status cases found',
+                ? 'No clients match your search'
+                : 'No clients found',
         message:
             _searchQuery.isNotEmpty
                 ? 'Try a different search term or clear the search'
-                : status == 'All'
-                ? 'Add your first case by tapping the + button'
-                : 'Cases with $status status will appear here',
+                : 'Add your first client by tapping the + button',
         buttonText: _searchQuery.isNotEmpty ? 'Clear Search' : null,
         onButtonPressed:
             _searchQuery.isNotEmpty
@@ -415,30 +330,29 @@ class _CasesScreenState extends State<CasesScreen>
     }
 
     return RefreshIndicator(
-      onRefresh:
-          () => Provider.of<CaseProvider>(context, listen: false).fetchCases(),
+      onRefresh: () => clientProvider.fetchClients(),
       child: ListView.builder(
         padding: EdgeInsets.all(16),
-        itemCount: filteredCases.length,
+        itemCount: filteredClients.length,
         itemBuilder: (context, index) {
-          final caseItem = filteredCases[index];
-          return CaseListItem(
-            caseItem: caseItem,
+          final client = filteredClients[index];
+          return ClientListItem(
+            client: client,
             onTap: () {
               Navigator.of(
                 context,
-              ).pushNamed('/case-details', arguments: caseItem);
+              ).pushNamed('/client-details', arguments: client);
             },
             onEdit: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AddCaseScreen(caseToEdit: caseItem),
+                  builder: (context) => AddClientScreen(clientToEdit: client),
                 ),
               );
             },
             onDelete: () {
-              _confirmDelete(context, caseItem);
+              _confirmDelete(context, client);
             },
           );
         },
